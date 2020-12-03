@@ -1,4 +1,3 @@
-
 class EventEmitter {
 	constructor() {
 		this.listeners = {};
@@ -399,7 +398,7 @@ window.onload = async () => {
 };
 
 function connServer() {
-	let socket = io("http://localhost:3000");
+	let socket = io();
 }
 
 
