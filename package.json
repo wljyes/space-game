@@ -1,0 +1,14 @@
+{
+    "name": "space-game-server",
+    "version": "0.0.1",
+    "description": "",
+    "main": "server.js",
+    "scripts": {
+        "start": ""
+    },
+    "author": "whh",
+    "dependencies": {
+        "express": "^4.17.1",
+        "socket.io": "^3.0.3"
+    }
+}
