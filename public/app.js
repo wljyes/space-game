@@ -47,9 +47,10 @@ class GameObject {
 }
 
 class Hero extends GameObject {
-	constructor(x, y) {
+	constructor(x, y, id) {
 		super(x, y);
 		(this.width = 99), (this.height = 75);
+		this.id = id;
 		this.type = 'Hero';
 		this.speed = { x: 0, y: 0 };
 		this.cooldown = 0;
@@ -89,7 +90,7 @@ class Enemy extends GameObject {
 		this.type = 'Enemy';
 		let id = setInterval(() => {
 			if (this.y < canvas.height - this.height) {
-				this.y += 5;
+				this.y += 1;
 			} else {
 				console.log('Stopped at', this.y);
 				clearInterval(id);
@@ -250,6 +251,7 @@ window.addEventListener('keydown', onKeyDown);
 window.addEventListener('keyup', (evt) => {
 	if (evt.key === 'ArrowUp') {
 		eventEmitter.emit(Messages.KEY_EVENT_UP);
+		// socket.emit(Messages.PLAYER_KEY_UP, {id: hero.id})
 	} else if (evt.key === 'ArrowDown') {
 		eventEmitter.emit(Messages.KEY_EVENT_DOWN);
 	} else if (evt.key === 'ArrowLeft') {
@@ -278,10 +280,21 @@ function createEnemies() {
 	}
 }
 
-function createHero() {
-	hero = new Hero(canvas.width / 2 - 45, canvas.height - canvas.height / 4);
+
+var myId;
+var heros = [];
+
+function createHero(id) {
+	hero = new Hero(canvas.width / 2 - 45, canvas.height - canvas.height / 4, id);
+	heros[id] = hero;
 	hero.img = heroImg;
 	gameObjects.push(hero);
+}
+
+function createOldHero(id, x, y) {
+	createHero(id);
+	heros[id].x = x;
+	heros[id].y = y;
 }
 
 function updateGameObjects() {
@@ -313,9 +326,23 @@ function drawGameObjects(ctx) {
 }
 
 function initGame() {
+	connServer();
 	gameObjects = [];
 	createEnemies();
-	createHero();
+	
+	socket.on('ID_ASSIGN', id => {
+		createHero(id);
+		myId = id;
+	});
+
+	socket.on('PLAYER_COME_IN', id => {
+		createHero(id);
+		socket.emit('NOTIFY_LOC', {fromId: myId, toId: id, x: heros[myId].x, y: heros[myId].y})
+	});
+
+	socket.on('OLD_PLAYER_NOTIFY', (msg) => {
+		createOldHero(msg.fromId, msg.x, msg.y);
+	})
 
 	eventEmitter.on(Messages.KEY_EVENT_UP, () => {
 		hero.y -= 5;
@@ -394,11 +421,12 @@ window.onload = async () => {
 		drawLife();
 		drawGameObjects(ctx);
 	}, 50);
-	connServer();
 };
 
+var socket;
+
 function connServer() {
-	let socket = io();
+	socket = io();
 }
 
 
