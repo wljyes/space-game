@@ -11,17 +11,16 @@ app.get('/', (req, res) => {
 });
 
 http.listen(80, () => {
-    console.log('listening on *:3000');
+    console.log('listening on *:80');
 });
 
 //todo: atomic operation
-var id = 1;
 var ids = [];
 var sockets = [];
 
 io.on('connection', (socket) => {
-    console.log('a player connected.');
-    ids[socket] = id++;
+    console.log('a player connected.' + socket.id);
+    ids[socket] = socket.id;
     sockets[ids[socket]] = socket;
 
     socket.emit('ID_ASSIGN', ids[socket]);
@@ -51,10 +50,10 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log('a player is gone.');
-        socket.broadcast.emit(Messages.PLAYER_LEAVE, id);
-        delete sockets[socket];
-        delete ids[id];
+        console.log('a player is gone.' + socket.id);
+        socket.broadcast.emit(Messages.PLAYER_LEAVE, socket.id);
+        delete sockets[socket.id];
+        delete ids[socket];
     });
 });
 

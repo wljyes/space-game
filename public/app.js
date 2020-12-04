@@ -90,7 +90,7 @@ class Enemy extends GameObject {
 		this.type = 'Enemy';
 		let id = setInterval(() => {
 			if (this.y < canvas.height - this.height) {
-				this.y += 1;
+				this.y += 2;
 			} else {
 				console.log('Stopped at', this.y);
 				clearInterval(id);
@@ -363,6 +363,12 @@ function initGame() {
 
 	socket.on(Messages.PLAYER_LEAVE, (id) => {
 		heros[id].dead = true;
+		// gameObjects.forEach(g => {
+		// 	if (g.type === 'Hero' && g.id === id) {
+		// 		g.dead = true;
+		// 		console.log('Delete' + id);
+		// 	}
+		// })
 		delete heros[id];
 	});
 
