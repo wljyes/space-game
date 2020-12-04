@@ -128,7 +128,7 @@ function loadTexture(path) {
 
 function drawLife() {
 	const START_POS = canvas.width - 180;
-	for(let i=0; i < hero.life; i++) {
+	for(let i=0; i < heros[myId].life; i++) {
 		ctx.drawImage(
 			lifeImg,
 			START_POS + (45 * (i+1)),
@@ -141,7 +141,7 @@ function drawPoints() {
 	ctx.font = "30px Arial";
 	ctx.fillStyle = "red";
 	ctx.textAlign = "left";
-	drawText("Points: " + hero.points, 10, canvas.height-20);
+	drawText("Points: " + heros[myId].points, 10, canvas.height-20);
 }
 
 function drawText(message, x, y) {
@@ -153,7 +153,7 @@ function intersectRect(r1, r2) {
 }
 
 function isHeroDead() {
-	return hero.life <= 0;
+	return heros[myId].life <= 0;
 }
 
 function isEnemiesDead() {
@@ -205,7 +205,7 @@ function resetGame() {
 	}
 }
 
-const Messages = {
+export const Messages = {
 	KEY_EVENT_UP: 'KEY_EVENT_UP',
 	KEY_EVENT_DOWN: 'KEY_EVENT_DOWN',
 	KEY_EVENT_LEFT: 'KEY_EVENT_LEFT',
@@ -216,6 +216,13 @@ const Messages = {
 	GAME_END_WIN: 'GAME_END_WIN',
 	GAME_END_LOSS: 'GAME_END_LOSS',
 	KEY_EVENT_ENTER: 'KEY_EVENT_ENTER',
+	PLAYER_KEY_DOWN: 'PLAYER_KEY_DOWN',
+	PLAYER_KEY_UP: 'PLAYER_KEY_UP',
+	PLAYER_KEY_LEFT: 'PLAYER_KEY_LEFT',
+	PLAYER_KEY_RIGHT: 'PLAYER_KEY_RIGHT',
+	PLAYER_KEY_SPACE: 'PLAYER_KEY_SPACE',
+	PLAYER_KEY_ENTER: 'PLAYER_KEY_ENTER',
+	PLAYER_LEAVE: 'PLAYER_LEAVE'
 };
 
 let heroImg,
@@ -225,7 +232,6 @@ let heroImg,
 	canvas,
 	ctx,
 	gameObjects = [],
-	hero,
 	gameLoopId,
 	eventEmitter = new EventEmitter();
 
@@ -251,17 +257,21 @@ window.addEventListener('keydown', onKeyDown);
 window.addEventListener('keyup', (evt) => {
 	if (evt.key === 'ArrowUp') {
 		eventEmitter.emit(Messages.KEY_EVENT_UP);
-		// socket.emit(Messages.PLAYER_KEY_UP, {id: hero.id})
+		socket.emit(Messages.PLAYER_KEY_UP, myId);
 	} else if (evt.key === 'ArrowDown') {
 		eventEmitter.emit(Messages.KEY_EVENT_DOWN);
+		socket.emit(Messages.PLAYER_KEY_DOWN, myId);
 	} else if (evt.key === 'ArrowLeft') {
 		eventEmitter.emit(Messages.KEY_EVENT_LEFT);
+		socket.emit(Messages.PLAYER_KEY_LEFT, myId);
 	} else if (evt.key === 'ArrowRight') {
 		eventEmitter.emit(Messages.KEY_EVENT_RIGHT);
+		socket.emit(Messages.PLAYER_KEY_RIGHT, myId);
 	} else if (evt.keyCode === 32) {
 		eventEmitter.emit(Messages.KEY_EVENT_SPACE);
 	} else if (evt.key === "Enter") {
 		eventEmitter.emit(Messages.KEY_EVENT_ENTER);
+		// socket.emit(Messages.PLAYER_KEY_ENTER, myId);
 	}
 });
 
@@ -285,19 +295,21 @@ var myId;
 var heros = [];
 
 function createHero(id) {
-	hero = new Hero(canvas.width / 2 - 45, canvas.height - canvas.height / 4, id);
+	let hero = new Hero(canvas.width / 2 - 45, canvas.height - canvas.height / 4, id);
 	heros[id] = hero;
 	hero.img = heroImg;
 	gameObjects.push(hero);
 }
 
 function createOldHero(id, x, y) {
-	createHero(id);
-	heros[id].x = x;
-	heros[id].y = y;
+	let oh = new Hero(x, y, id);
+	heros[id] = oh;
+	oh.img = heroImg;
+	gameObjects.push(oh);
 }
 
 function updateGameObjects() {
+	gameObjects = gameObjects.filter((go) => !go.dead);
 	const enemies = gameObjects.filter((go) => go.type === 'Enemy');
 	const lasers = gameObjects.filter((go) => go.type === 'Laser');
 	// laser hit something
@@ -312,10 +324,12 @@ function updateGameObjects() {
 		});
 	});
 	enemies.forEach(enemy => {
-		const heroRect = hero.rectFromGameObject();
-		if (!enemy.dead && intersectRect(heroRect, enemy.rectFromGameObject())) {
-			eventEmitter.emit(Messages.COLLISION_ENEMY_HERO, {enemy});
-		}
+		heros.forEach(h => {
+			const heroRect = h.rectFromGameObject();
+			if (!enemy.dead && intersectRect(heroRect, enemy.rectFromGameObject())) {
+				eventEmitter.emit(Messages.COLLISION_ENEMY_HERO, {enemy, h});
+			}
+		})
 	})
 
 	gameObjects = gameObjects.filter((go) => !go.dead);
@@ -333,53 +347,79 @@ function initGame() {
 	socket.on('ID_ASSIGN', id => {
 		createHero(id);
 		myId = id;
+		console.log("myId = " + id);
 	});
 
 	socket.on('PLAYER_COME_IN', id => {
 		createHero(id);
+		console.log("send :" + ' x:' + heros[myId].x + " y:" + heros[myId].y);
 		socket.emit('NOTIFY_LOC', {fromId: myId, toId: id, x: heros[myId].x, y: heros[myId].y})
 	});
 
 	socket.on('OLD_PLAYER_NOTIFY', (msg) => {
 		createOldHero(msg.fromId, msg.x, msg.y);
-	})
+		console.log('id = ' + msg.fromId + " x: " + msg.x + ' y: ' + msg.y);
+	});
 
+	socket.on(Messages.PLAYER_LEAVE, (id) => {
+		heros[id].dead = true;
+		delete heros[id];
+	});
+
+	socket.on(Messages.PLAYER_KEY_UP, id => {
+		heros[id].y -= 5;
+	});
 	eventEmitter.on(Messages.KEY_EVENT_UP, () => {
-		hero.y -= 5;
+		heros[myId].y -= 5;
 	});
 
 	eventEmitter.on(Messages.KEY_EVENT_DOWN, () => {
-		hero.y += 5;
+		heros[myId].y += 5;
+	});
+	socket.on(Messages.PLAYER_KEY_DOWN, (id) => {
+		heros[id].y += 5;
 	});
 
 	eventEmitter.on(Messages.KEY_EVENT_LEFT, () => {
-		hero.x -= 5;
+		heros[myId].x -= 5;
+	});
+	socket.on(Messages.PLAYER_KEY_LEFT, id => {
+		console.log(id);
+		heros[id].x -= 5;
 	});
 
 	eventEmitter.on(Messages.KEY_EVENT_RIGHT, () => {
-		hero.x += 5;
+		heros[myId].x += 5;
+	});
+	socket.on(Messages.PLAYER_KEY_RIGHT, id => {
+		heros[id].x += 5;
 	});
 
 	eventEmitter.on(Messages.KEY_EVENT_SPACE, () => {
-		if (hero.canFire()) {
-			hero.fire();
+		if (heros[myId].canFire()) {
+			heros[myId].fire();
+			socket.emit(Messages.PLAYER_KEY_SPACE, myId);
 		}
 		// console.log('cant fire - cooling down')
+	});
+
+	socket.on(Messages.PLAYER_KEY_SPACE, id => {
+		heros[id].fire();
 	});
 
 	eventEmitter.on(Messages.COLLISION_ENEMY_LASER, (_, { first, second }) => {
 		first.dead = true;
 		second.dead = true;
-		hero.incrementPoints();
+		heros[myId].incrementPoints();
 
 		if (isEnemiesDead()) {
 			eventEmitter.emit(Messages.GAME_END_WIN);
 		}
 	});
 
-	eventEmitter.on(Messages.COLLISION_ENEMY_HERO, (_, { enemy }) => {
+	eventEmitter.on(Messages.COLLISION_ENEMY_HERO, (_, { enemy, h }) => {
 		enemy.dead = true;
-		hero.decrementLife();
+		h.decrementLife();
 		if (isHeroDead()) {
 			eventEmitter.emit(Messages.GAME_END_LOSS);
 			return; //loss before victory
@@ -391,10 +431,12 @@ function initGame() {
 
 	eventEmitter.on(Messages.GAME_END_WIN, () => {
 		endGame(true);
+		socket.close();
 	}); 
 
 	eventEmitter.on(Messages.GAME_END_LOSS, () => {
 		endGame(false);
+		socket.close();
 	});
 
 	eventEmitter.emit(Messages.KEY_EVENT_ENTER, () => {
